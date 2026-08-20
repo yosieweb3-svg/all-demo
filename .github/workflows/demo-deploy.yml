@@ -1,0 +1,96 @@
+name: deploy-demo
+ 
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Enter branch name'
+        required: true
+        type: string
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          check-latest: true
+
+      - name: Run Ruff Linter
+        run: |
+          pip install ruff
+          ruff check . # смотрим код на ошибки
+        shell: bash
+
+  test:
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false #Делаем тесты, даже если одна из стадий упала
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Качаем зависимости и запускаем тесты
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+          pytest --junitxml=pytest.xml
+        shell: bash
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.python-version }}
+          path: pytest.xml # Репорт-запись теста
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: ssh-connect
+        uses: appleboy/ssh-action@v1.0.3
+        with:   
+          host: ${{ secrets.HOST }}
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: |
+            echo "deploy start"
+            whoami
+            
+            cd /mnt/other-files/auctionbot_prod
+            
+            git fetch
+            git checkout origin/${{ github.event.inputs.branch_name || github.ref_name }} # Вытягиваем ветку
+            git branch
+            echo $(git branch --show-current)
+            
+            docker compose up -d --build
+            docker ps -a
+            
+            echo "Состояние диска до очистки:"
+            docker system df
+            
+            [[ $(df / | awk 'NR==2 {print int($5)}') -gt 90 ]] && docker system prune -a -f || echo "Space OK"
+# Чистим память, если она >90
