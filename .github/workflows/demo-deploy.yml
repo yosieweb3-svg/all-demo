@@ -103,20 +103,24 @@ jobs:
           password: ${{ secrets.PASSWORD }}
           port: ${{ secrets.PORT }}
           script: |
-            echo "deploy start"
-            whoami
+            echo "Hello World!"
+            ls -lh
+
+  
+            # echo "deploy start"
+            # whoami
             
-            cd /mnt/other-files/auctionbot_prod
+            # cd /mnt/other-files/auctionbot_prod
             
-            git fetch
-            git checkout origin/${{ github.event.inputs.branch_name || github.ref_name }} # Вытягиваем ветку
-            git branch
-            echo $(git branch --show-current)
+            # git fetch
+            # git checkout origin/${{ github.event.inputs.branch_name || github.ref_name }} # Вытягиваем ветку
+            # git branch
+            # echo $(git branch --show-current)
             
-            docker compose up -d --build
-            docker ps -a
+            # docker compose up -d --build
+            # docker ps -a
             
-            echo "Состояние диска до очистки:"
-            docker system df
+            # echo "Состояние диска до очистки:"
+            # docker system df
             
             [[ $(df / | awk 'NR==2 {print int($5)}') -gt 90 ]] && docker system prune -a -f || echo "Space OK"
